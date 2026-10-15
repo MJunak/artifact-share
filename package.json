@@ -1,0 +1,29 @@
+{
+  "name": "artifact-share",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Self-hosted artifact sharing: publish HTML/Markdown pages with images under shareable links",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MJunak/artifact-share.git"
+  },
+  "homepage": "https://github.com/MJunak/artifact-share#readme",
+  "bugs": {
+    "url": "https://github.com/MJunak/artifact-share/issues"
+  },
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test test/*.test.js",
+    "smoke": "test/smoke.sh"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "marked": "^16.0.0"
+  },
+  "license": "MIT"
+}

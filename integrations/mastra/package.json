@@ -1,0 +1,29 @@
+{
+  "name": "artifact-share-mastra",
+  "version": "0.1.0",
+  "description": "Mastra tools and MCP server adapter for artifact-share",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MJunak/artifact-share.git",
+    "directory": "integrations/mastra"
+  },
+  "homepage": "https://github.com/MJunak/artifact-share/tree/main/integrations/mastra",
+  "type": "module",
+  "exports": "./src/index.js",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "^1.77.0",
+    "@mastra/mcp": "^2.4.0",
+    "zod": "^4.6.7"
+  },
+  "license": "MIT"
+}

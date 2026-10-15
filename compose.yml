@@ -1,0 +1,43 @@
+# artifact-share — docker compose / Portainer stack.
+# Copy .env.example to .env (or set the variables in Portainer), then: docker compose up -d --build
+# Put a TLS-terminating reverse proxy in front for anything beyond local testing (see docs/deployment.md).
+services:
+  artifact-share:
+    build: .
+    image: artifact-share:${IMAGE_TAG:-latest}
+    container_name: artifact-share
+    restart: unless-stopped
+    environment:
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN (openssl rand -base64 32)}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      ADMIN_URL: ${ADMIN_URL:-}
+      CONTENT_URL: ${CONTENT_URL:-}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      SITE_NAME: ${SITE_NAME:-Artifacts}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
+      MAX_CONTENT_MB: ${MAX_CONTENT_MB:-10}
+      MAX_ARTIFACT_STORAGE_MB: ${MAX_ARTIFACT_STORAGE_MB:-20}
+      MAX_STORAGE_VALUE_MB: ${MAX_STORAGE_VALUE_MB:-1}
+      SESSION_DAYS: ${SESSION_DAYS:-30}
+    # Extra bindings (e.g. a second interface for a remote proxy) belong in compose.override.yml.
+    ports:
+      # Bind to a specific interface (e.g. a VPN/Tailscale IP or 127.0.0.1 behind a local proxy).
+      # 0.0.0.0 bypasses host firewalls such as UFW because Docker inserts its own iptables rules.
+      - "${BIND_ADDR:-127.0.0.1}:${HOST_PORT:-8790}:3000"
+    volumes:
+      - artifact-data:/data
+    # Hardening: immutable root fs, no Linux capabilities, no privilege escalation, bounded resources.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 100
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  artifact-data:

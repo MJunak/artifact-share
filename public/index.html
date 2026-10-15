@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{SITE_NAME}}</title>
+  <link rel="icon" href="/static/icon.svg">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div id="app"></div>
+
+  <template id="tpl-login">
+    <main class="login">
+      <form id="login-form" class="card">
+        <img src="/static/icon.svg" alt="" width="40" height="40">
+        <h1>{{SITE_NAME}}</h1>
+        <p class="muted">Admin-Token eingeben, um Artifacts zu verwalten.</p>
+        <input type="password" name="token" placeholder="Admin-Token" autocomplete="current-password" required autofocus>
+        <button class="primary" type="submit">Anmelden</button>
+        <p class="error" hidden></p>
+      </form>
+    </main>
+  </template>
+
+  <template id="tpl-list">
+    <header class="topbar">
+      <a class="brand" href="/"><img src="/static/icon.svg" alt=""><span>{{SITE_NAME}}</span></a>
+      <input type="search" id="search" placeholder="Suchen…">
+      <a class="button primary" href="/new" data-nav>+ Neues Artifact</a>
+      <a class="button ghost" href="/tokens" data-nav>API-Tokens</a>
+      <button id="logout" class="ghost" title="Abmelden">Abmelden</button>
+    </header>
+    <main class="list">
+      <div id="drop-hint" class="drop-hint">HTML- oder Markdown-Datei hierher ziehen, um sofort ein Artifact zu erstellen</div>
+      <div id="items" class="items"></div>
+      <p id="empty" class="empty" hidden>Noch keine Artifacts. Leg eins an oder zieh eine .html/.md-Datei hierher.</p>
+    </main>
+  </template>
+
+  <template id="tpl-editor">
+    <header class="topbar">
+      <a class="brand" href="/" data-nav><img src="/static/icon.svg" alt=""><span>{{SITE_NAME}}</span></a>
+      <input id="title" class="title-input" placeholder="Titel" maxlength="200">
+      <div class="spacer"></div>
+      <span id="status" class="muted small"></span>
+      <a id="open-link" class="button ghost" target="_blank" rel="noopener" hidden>Öffnen ↗</a>
+      <button id="copy-link" class="ghost" hidden>Link kopieren</button>
+      <button id="save" class="primary">Speichern</button>
+    </header>
+    <main class="editor">
+      <section class="pane source">
+        <div class="toolbar">
+          <select id="kind" title="Typ">
+            <option value="html">HTML</option>
+            <option value="markdown">Markdown</option>
+          </select>
+          <label class="button ghost" title="Bilder/Dateien hochladen">
+            Datei hochladen<input type="file" id="upload" multiple hidden>
+          </label>
+          <label class="button ghost" title="HTML- oder Markdown-Datei als Inhalt laden">
+            Inhalt importieren<input type="file" id="import" accept=".html,.htm,.md,.markdown,.txt" hidden>
+          </label>
+          <select id="versions" title="Versionen" hidden></select>
+          <label class="toggle" title="Wenn aus, liefert der Link 404"><input type="checkbox" id="published" checked> Öffentlich</label>
+        </div>
+        <input id="description" placeholder="Kurzbeschreibung (optional, erscheint in Link-Vorschauen)" maxlength="500">
+        <textarea id="content" spellcheck="false" placeholder="HTML oder Markdown einfügen — Bilder per Drag &amp; Drop oder Einfügen hochladen"></textarea>
+        <div class="files">
+          <div class="files-head"><strong>Dateien</strong><span class="muted small">Klick fügt ein · URL kopiert den Link</span></div>
+          <div id="files" class="file-grid"></div>
+        </div>
+      </section>
+      <section class="pane preview">
+        <div class="toolbar">
+          <strong>Vorschau</strong>
+          <span class="muted small">live</span>
+          <div class="spacer"></div>
+          <button id="toggle-preview" class="ghost small">Ausblenden</button>
+        </div>
+        <iframe id="preview" sandbox="allow-scripts allow-forms allow-popups allow-modals" title="Vorschau"></iframe>
+      </section>
+    </main>
+  </template>
+
+  <template id="tpl-tokens">
+    <header class="topbar">
+      <a class="brand" href="/" data-nav><img src="/static/icon.svg" alt=""><span>{{SITE_NAME}}</span></a>
+      <div class="spacer"></div>
+      <a class="button ghost" href="/" data-nav>← Artifacts</a>
+    </header>
+    <main class="list">
+      <h2>API-Tokens</h2>
+      <p class="muted">Für Skripte, CI und Agents. <strong>publish</strong> darf Artifacts und Dateien pflegen,
+        <strong>admin</strong> zusätzlich Tokens verwalten. Der Token wird nur einmal angezeigt.</p>
+      <form id="token-form" class="item token-form">
+        <input name="name" placeholder="Name, z.B. openclaw oder ci" required maxlength="100">
+        <select name="scope"><option value="publish">publish</option><option value="admin">admin</option></select>
+        <select name="expires">
+          <option value="">läuft nie ab</option><option value="30">30 Tage</option>
+          <option value="90">90 Tage</option><option value="365">1 Jahr</option>
+        </select>
+        <button class="primary" type="submit">Token erstellen</button>
+      </form>
+      <div id="new-token" class="item new-token" hidden>
+        <div><strong>Neuer Token</strong> <span class="muted small">jetzt kopieren, er wird nicht wieder angezeigt</span>
+          <code id="new-token-value"></code></div>
+        <button id="copy-token" class="ghost small">Kopieren</button>
+      </div>
+      <div id="tokens" class="items"></div>
+      <p id="tokens-empty" class="empty" hidden>Noch keine Tokens.</p>
+    </main>
+  </template>
+
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# artifact — command line client for artifact-share.
+#
+# Needs: curl, jq
+# Config: ARTIFACT_SHARE_URL   base URL, e.g. https://artifacts.example.com
+#         ARTIFACT_SHARE_TOKEN API token (publish or admin scope)
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: artifact <command> [args]
+
+Artifacts
+  list                                  List artifacts (id, version, views, title, url)
+  get <id>                              Show metadata of one artifact (JSON)
+  cat <id>                              Print the content of an artifact
+  publish <file> [options]              Create an artifact from a .html/.md file (or - for stdin)
+      --title <t>  --description <d>  --kind html|markdown  --draft
+  update <id> [<file>] [options]        Replace content and/or metadata
+      --title <t>  --description <d>  --kind html|markdown  --publish  --unpublish
+  versions <id>                         List versions
+  delete <id>                           Delete an artifact and its files
+
+Files
+  upload <file> [--artifact <id>]       Upload a file, prints its JSON (path/url)
+  files [<artifact-id>]                 List files
+  rm-file <file-id>                     Delete a file
+
+Tokens (admin scope)
+  tokens                                List API tokens
+  token-create <name> [--scope publish|admin] [--days N]
+  token-revoke <token-id>
+  logout-all                            Invalidate every browser session
+
+  whoami                                Show the scope of the configured token
+EOF
+}
+
+: "${ARTIFACT_SHARE_URL:?set ARTIFACT_SHARE_URL}"
+: "${ARTIFACT_SHARE_TOKEN:?set ARTIFACT_SHARE_TOKEN}"
+BASE=${ARTIFACT_SHARE_URL%/}
+
+# Never pass the token on the command line (visible in ps); hand it to curl via a header file on stdin.
+api() {
+  local method=$1 path=$2; shift 2
+  local out status
+  out=$(mktemp)
+  status=$(printf 'Authorization: Bearer %s\n' "$ARTIFACT_SHARE_TOKEN" |
+    curl -sS -o "$out" -w '%{http_code}' -X "$method" -H @- "$@" "$BASE$path") || { rm -f "$out"; exit 1; }
+  if [[ $status -ge 400 ]]; then
+    echo "error $status: $(jq -r '.error // .' <"$out" 2>/dev/null || cat "$out")" >&2
+    rm -f "$out"
+    exit 1
+  fi
+  cat "$out"
+  rm -f "$out"
+}
+
+api_json() { # method path json
+  api "$1" "$2" -H 'Content-Type: application/json' --data-binary "$3"
+}
+
+read_content() { # file or "-"
+  if [[ $1 == - ]]; then cat; else cat -- "$1"; fi
+}
+
+kind_for() {
+  case "$1" in *.md | *.markdown) echo markdown ;; *) echo html ;; esac
+}
+
+cmd=${1:-help}
+shift || true
+
+case "$cmd" in
+  list)
+    api GET /api/artifacts | jq -r '.[] | [.id, "v\(.version)", "\(.views) views", (if .published then "public" else "draft" end), .title, .url] | @tsv'
+    ;;
+  get) api GET "/api/artifacts/${1:?id}" | jq 'del(.content)' ;;
+  cat) api GET "/api/artifacts/${1:?id}" | jq -j .content ;;
+  versions) api GET "/api/artifacts/${1:?id}/versions" | jq -r '.[] | [ "v\(.version)", (.created_at / 1000 | todate), .title] | @tsv' ;;
+  publish)
+    file=${1:?file}; shift
+    title=$(basename -- "$file"); title=${title%.*}; desc=""; kind=$(kind_for "$file"); published=true
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --title) title=$2; shift 2 ;;
+        --description) desc=$2; shift 2 ;;
+        --kind) kind=$2; shift 2 ;;
+        --draft) published=false; shift ;;
+        *) echo "unknown option $1" >&2; exit 2 ;;
+      esac
+    done
+    body=$(read_content "$file" | jq -Rs --arg t "$title" --arg d "$desc" --arg k "$kind" --argjson p "$published" \
+      '{title: $t, description: $d, kind: $k, published: $p, content: .}')
+    api_json POST /api/artifacts "$body" | jq -r '"\(.url)\t\(.id)\tv\(.version)"'
+    ;;
+  update)
+    id=${1:?id}; shift
+    patch='{}'
+    if [[ $# -gt 0 && $1 != --* ]]; then
+      patch=$(read_content "$1" | jq -Rs '{content: .}'); shift
+    fi
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --title) patch=$(jq --arg v "$2" '.title = $v' <<<"$patch"); shift 2 ;;
+        --description) patch=$(jq --arg v "$2" '.description = $v' <<<"$patch"); shift 2 ;;
+        --kind) patch=$(jq --arg v "$2" '.kind = $v' <<<"$patch"); shift 2 ;;
+        --publish) patch=$(jq '.published = true' <<<"$patch"); shift ;;
+        --unpublish) patch=$(jq '.published = false' <<<"$patch"); shift ;;
+        *) echo "unknown option $1" >&2; exit 2 ;;
+      esac
+    done
+    api_json PUT "/api/artifacts/$id" "$patch" | jq -r '"\(.url)\tv\(.version)\t\(if .published then "public" else "draft" end)"'
+    ;;
+  delete) api DELETE "/api/artifacts/${1:?id}" | jq -c . ;;
+  upload)
+    file=${1:?file}; shift
+    qs="name=$(jq -rn --arg v "$(basename -- "$file")" '$v|@uri')"
+    if [[ ${1:-} == --artifact ]]; then qs+="&artifact=${2:?id}"; fi
+    api POST "/api/files?$qs" -H 'Content-Type: application/octet-stream' --data-binary @"$file" | jq '{id, name, mime, size, path, url}'
+    ;;
+  files)
+    path=/api/files; [[ -n ${1:-} ]] && path+="?artifact=$1"
+    api GET "$path" | jq -r '.[] | [.id, .name, .mime, "\(.size)B", (.artifact_id // "-"), .url] | @tsv'
+    ;;
+  rm-file) api DELETE "/api/files/${1:?file-id}" | jq -c . ;;
+  tokens)
+    api GET /api/tokens | jq -r '.[] | [.id, .name, .scope, "\(.prefix)…", (if .last_used_at then "used " + (.last_used_at / 1000 | todate) else "never used" end), (if .expires_at then "expires " + (.expires_at / 1000 | todate) else "no expiry" end)] | @tsv'
+    ;;
+  token-create)
+    name=${1:?name}; shift; scope=publish; days=null
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --scope) scope=$2; shift 2 ;;
+        --days) days=$2; shift 2 ;;
+        *) echo "unknown option $1" >&2; exit 2 ;;
+      esac
+    done
+    api_json POST /api/tokens "$(jq -n --arg n "$name" --arg s "$scope" --argjson d "$days" '{name: $n, scope: $s, expires_in_days: $d}')" |
+      jq '{id, name, scope, expires_at, token}'
+    echo "Store the token now — it is not shown again." >&2
+    ;;
+  token-revoke) api DELETE "/api/tokens/${1:?token-id}" | jq -c . ;;
+  logout-all) api DELETE /api/sessions | jq -c . ;;
+  whoami) api GET /api/whoami | jq -c . ;;
+  help | -h | --help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac
